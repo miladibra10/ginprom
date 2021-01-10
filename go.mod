@@ -1,4 +1,4 @@
-module github.com/Depado/ginprom
+module github.com/miladibra10/ginprom
 
 require (
 	github.com/appleboy/gofight/v2 v2.1.2
