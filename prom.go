@@ -50,6 +50,7 @@ type Prometheus struct {
 	Token       string
 	Ignored     pmapb
 	Engine      *gin.Engine
+	ExportEngine      *gin.Engine
 	PathMap     pmap
 	BucketsSize []float64
 	Registry    *prometheus.Registry
@@ -169,6 +170,17 @@ func Engine(e *gin.Engine) func(*Prometheus) {
 	}
 }
 
+// ExportEngine is an option allowing to set another gin engine to expose metrics on that.
+// Example :
+// r := gin.Default()
+// p := ginprom.New(ExportEngine(r))
+func ExportEngine(e *gin.Engine) func(*Prometheus) {
+	return func(p *Prometheus) {
+		p.ExportEngine = e
+	}
+}
+
+
 // Registry is an option allowing to set a  *prometheus.Registry with New.
 // Use this option if you want to use a custom Registry instead of a global one that prometheus
 // client uses by default
@@ -198,9 +210,14 @@ func New(options ...func(*Prometheus)) *Prometheus {
 	}
 
 	p.register()
-	if p.Engine != nil {
-		registerer, gatherer := p.getRegistererAndGatherer()
-		p.Engine.GET(p.MetricsPath, prometheusHandler(p.Token, registerer, gatherer))
+
+	registerer, gatherer := p.getRegistererAndGatherer()
+
+	if p.ExportEngine != nil {
+		p.ExportEngine.GET(p.MetricsPath, PrometheusHandler(p.Token, registerer, gatherer))
+	}
+	if p.Engine != nil && p.ExportEngine == nil {
+		p.Engine.GET(p.MetricsPath, PrometheusHandler(p.Token, registerer, gatherer))
 	}
 
 	return p
@@ -323,11 +340,11 @@ func (p *Prometheus) Instrument() gin.HandlerFunc {
 // initialization
 func (p *Prometheus) Use(e *gin.Engine) {
 	registerer, gatherer := p.getRegistererAndGatherer()
-	e.GET(p.MetricsPath, prometheusHandler(p.Token, registerer, gatherer))
+	e.GET(p.MetricsPath, PrometheusHandler(p.Token, registerer, gatherer))
 	p.Engine = e
 }
 
-func prometheusHandler(token string, registerer prometheus.Registerer, gatherer prometheus.Gatherer) gin.HandlerFunc {
+func PrometheusHandler(token string, registerer prometheus.Registerer, gatherer prometheus.Gatherer) gin.HandlerFunc {
 	h := promhttp.InstrumentMetricHandler(
 		registerer, promhttp.HandlerFor(gatherer, promhttp.HandlerOpts{}),
 	)
